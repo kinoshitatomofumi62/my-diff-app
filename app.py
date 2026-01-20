@@ -1,81 +1,69 @@
+
 import streamlit as st
 import pandas as pd
 import datetime
-import plotly.express as px
+import random
 
-# ページの設定
-st.set_page_config(page_title="微分計算マスター", layout="wide")
-st.title("📊 微分計算・成長管理アプリ")
+st.set_page_config(page_title="微分計算10本ノック", layout="wide")
 
-# 問題データ（LaTeX形式で記述）
-# \\ は Python でバックスラッシュを表示するために2つ重ねています
-questions = [
-    {"q": "4x^3 - 5x + 2", "a": "12x^2 - 5", "tag": "基礎"},
-    {"q": "(2x + 3)^5", "a": "10(2x + 3)^4", "tag": "合成関数"},
-    {"q": "\\sin(2x + 1)", "a": "2\\cos(2x + 1)", "tag": "三角・合成"},
-    {"q": "x^2 \\cos x", "a": "2x \\cos x - x^2 \\sin x", "tag": "積の微分"},
-    {"q": "\\frac{e^x}{x}", "a": "\\frac{(x-1)e^x}{x^2}", "tag": "商の微分"},
-    {"q": "\\log(x^2 + 1)", "a": "\\frac{2x}{x^2 + 1}", "tag": "対数・合成"},
-    {"q": "\\tan x", "a": "\\frac{1}{\\cos^2 x}", "tag": "三角関数"},
-    {"q": "e^{x^2}", "a": "2x e^{x^2}", "tag": "指数・合成"},
-    {"q": "\\sqrt{x}", "a": "\\frac{1}{2\\sqrt{x}}", "tag": "べき乗"},
-    {"q": "x \\log x", "a": "\\log x + 1", "tag": "積の微分"}
-]
-
-# データの読み込み
-if 'history' not in st.session_state:
-    st.session_state.history = pd.DataFrame(columns=["日付", "単元", "結果", "理由"])
-
-# メイン画面のタブ
-tab1, tab2 = st.tabs(["今日のトレーニング", "伸び率レポート"])
-
-with tab1:
-    idx = st.selectbox("解く問題を選択してください", range(len(questions)), format_func=lambda i: f"問題 {i+1}")
-    q = questions[idx]
+# --- 問題生成ロジック ---
+def generate_question(type_idx):
+    a = random.randint(2, 9)
+    b = random.randint(2, 5)
+    c = random.randint(1, 9)
     
-    st.write("### 問題")
-    st.latex(f"y = {q['q']}")
-    st.write("を微分せよ。")
+    if type_idx == 0: # べき乗
+        return {"q": f"{a}x^{b} - {c}x", "a": f"{a*b}x^{b-1} - {c}", "tag": "基礎"}
+    elif type_idx == 1: # 合成関数
+        return {"q": f"({a}x + {c})^{b}", "a": f"{a*b}({a}x + {c})^{b-1}", "tag": "合成関数"}
+    elif type_idx == 2: # 三角関数
+        return {"q": f"\\sin({a}x + {c})", "a": f"{a}\\cos({a}x + {c})", "tag": "三角・合成"}
+    elif type_idx == 3: # 指数
+        return {"q": f"e^{{{a}x}}", "a": f"{a}e^{{{a}x}}", "tag": "指数"}
+    elif type_idx == 4: # 対数
+        return {"q": f"\\log({a}x^2 + {c})", "a": f"\\frac{{{2*a}x}}{{{a}x^2 + {c}}}", "tag": "対数・合成"}
+    # 他のパターンも同様に追加可能（今回は5パターン×2セットで10問構成にします）
+    return {"q": f"{a}x^{b}", "a": f"{a*b}x^{b-1}", "tag": "基礎"}
+
+# --- アプリの状態管理 ---
+if 'step' not in st.session_state:
+    st.session_state.step = 0  # 現在何問目か
+    st.session_state.score = {"瞬殺！": 0, "完答（遅め）": 0, "ミスした...": 0}
+    st.session_state.current_q = generate_question(0)
+
+# --- 画面表示 ---
+st.title("🔢 微分計算10本ノック")
+
+if st.session_state.step < 10:
+    st.subheader(f"第 {st.session_state.step + 1} 問 / 全10問")
+    st.latex(f"y = {st.session_state.current_q['q']}")
     
-    if st.button("答え合わせ"):
+    if st.button("答えを表示"):
+        st.latex(f"y' = {st.session_state.current_q['a']}")
         st.write("---")
-        st.write("### 正解")
-        st.latex(f"y' = {q['a']}")
+        status = st.radio("自己採点:", ["瞬殺！", "完答（遅め）", "ミスした..."], key=f"radio_{st.session_state.step}")
         
-        st.write("---")
-        status = st.radio("結果はどうでしたか？", ["瞬殺！", "完答（遅め）", "ミスした..."])
-        
-        reason = "なし"
-        if status == "ミスした...":
-            reason = st.selectbox("ミス理由を教えてください:", ["符号ミス", "中身の微分忘れ", "公式混同", "計算ミス", "方針が立たず"])
-            
-        if st.button("この結果を記録する"):
-            new_entry = pd.DataFrame([[datetime.date.today(), q['tag'], status, reason]], 
-                                     columns=st.session_state.history.columns)
-            st.session_state.history = pd.concat([st.session_state.history, new_entry], ignore_index=True)
-            st.balloons()
-            st.success("記録完了！「伸び率レポート」タブで確認しましょう。")
+        if st.button("次の問題へ"):
+            # スコア記録
+            st.session_state.score[status] += 1
+            # 次の問題準備
+            st.session_state.step += 1
+            if st.session_state.step < 10:
+                st.session_state.current_q = generate_question(st.session_state.step % 5) # 5パターンを2周
+            st.rerun()
 
-with tab2:
-    st.header("📈 成長の記録")
-    if not st.session_state.history.empty:
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.subheader("ミスの内訳")
-            miss_df = st.session_state.history[st.session_state.history["理由"] != "なし"]
-            if not miss_df.empty:
-                fig_pie = px.pie(miss_df, names="理由", hole=0.3)
-                st.plotly_chart(fig_pie)
-            else:
-                st.write("ミスなし！素晴らしい！")
-        
-        with col2:
-            st.subheader("学習状況")
-            fig_bar = px.bar(st.session_state.history, x="日付", color="結果")
-            st.plotly_chart(fig_bar)
-
-        st.subheader("履歴詳細")
-        st.dataframe(st.session_state.history, use_container_width=True)
-    else:
-        st.write("まだデータがありません。まずは問題を解いて記録しましょう！")
+else:
+    st.balloons()
+    st.header("🎉 トレーニング終了！")
+    st.write("本日のリザルト：")
+    
+    col1, col2, col3 = st.columns(3)
+    col1.metric("瞬殺（完璧！）", st.session_state.score["瞬殺！"])
+    col2.metric("完答（あと一息）", st.session_state.score["完答（遅め）"])
+    col3.metric("ミス（要復習）", st.session_state.score["ミスした..."])
+    
+    if st.button("もう一度挑戦する"):
+        st.session_state.step = 0
+        st.session_state.score = {"瞬殺！": 0, "完答（遅め）": 0, "ミスした...": 0}
+        st.session_state.current_q = generate_question(0)
+        st.rerun()
